@@ -351,14 +351,13 @@ def plg(lg):
     pass
 
 
-def imitate_logs(project, max_num):
-    curdir = ".."
-    dataset_folder = curdir + "/logs/" + project
+def imitate_logs(rootdir, project, max_num):
+    dataset_folder = rootdir + "/logs/" + project
     dataset_path = dataset_folder + "/" + project + "_2k.log_structured_corrected.csv"
     raw_dataset = pd.read_csv(dataset_path)
     raw_dataset = raw_dataset[['Content', 'EventTemplate']]
     raw_dataset = raw_dataset.map( str)  # must convert to string or else will hit error
-    # raw_dataset = raw_dataset[:100]
+    raw_dataset = raw_dataset[:100]
 
     def read_csv_to_list(file_path):
         data_list = []
@@ -368,7 +367,7 @@ def imitate_logs(project, max_num):
                 data_list.append(row[0])
         return data_list
 
-    variablelist = read_csv_to_list(curdir + "/Variableset/variablelist1" + project + ".csv")
+    variablelist = read_csv_to_list(rootdir + "/Variableset/variablelist1" + project + ".csv")
 
     train_data = []
     parse_data = []
@@ -403,9 +402,9 @@ def imitate_logs(project, max_num):
     return train_data, parse_data
 
 
-def prepare_data(project,max_num):
+def prepare_data(rootdir, project,max_num):
 
-    train_data, parse_data = imitate_logs(project, max_num)
+    train_data, parse_data = imitate_logs(rootdir, project, max_num)
 
     from openprompt.data_utils import InputExample
 

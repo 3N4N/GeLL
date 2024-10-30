@@ -5,22 +5,17 @@ import argparse
 import string
 import csv
 import re
-from pprint import pprint
 import numbers
 import copy
-
-# import datasets
-# import transformers
 from datetime import datetime
 import random
 import numpy as np
 import pandas as pd
-from datasets import load_dataset, Dataset, concatenate_datasets
+
 from sklearn.metrics import accuracy_score, precision_recall_fscore_support
 from openprompt.pipeline_base import PromptForGeneration
 from openprompt.prompts.generation_verbalizer import GenerationVerbalizer
 
-from evaluator import get_accuracy
 from helper import (
     wordsplit,
     group_update,
@@ -38,7 +33,6 @@ batch_size_train    = 5
 model               = 'flan-t5-small'
 num_epochs          = 1
 learning_rate       = 5e-4
-train_percentage    = "0.025"
 systems             = "Apache"
 systems             = "Android,Apache,BGL,HDFS,HPC,Hadoop,HealthApp,Linux,Mac,OpenSSH,OpenStack,Proxifier,Spark,Thunderbird,Windows,Zookeeper"
 
@@ -53,15 +47,13 @@ seed = 61
 random.seed(seed)
 lr = learning_rate
 
-validation = True
 model_name = "t5"
-curdir = '..'
+rootdir = '..'
 
 for project in systems.split(","):
     start_time = datetime.now()
-    pretrainedmodel_path = curdir + "/LLMs/{}/".format(model)  # the path of the pre-trained model
-    # pretrainedmodel_path = curdir + "/fine_tuned_model/{}/{}/{}".format(model,project,train_percentage)
-    train_data, parse_data, valid_data, logs = prepare_data(project=project,precentage=train_percentage, max_num=max_num)
+    pretrainedmodel_path = rootdir + "/LLMs/{}/".format(model)
+    train_data, parse_data, logs = prepare_data(rootdir, project, max_num)
     print(
         "Project: {}, Seed : {} , Model : {} , Epoch : {} , Batch_size : {} , Learning Rate : {}".format(
             project,
@@ -130,7 +122,6 @@ for project in systems.split(","):
         return dataloader
 
     train_dataloader = getdataloader(train_data, batch_size, mytemplate, myverbalizer, tokenizer, WrapperClass, True)
-    valid_dataloader = getdataloader(valid_data, batch_size, mytemplate, myverbalizer, tokenizer, WrapperClass, False)
     parse_dataloader = getdataloader(parse_data, batch_size, mytemplate, myverbalizer, tokenizer, WrapperClass, False)
 
     from transformers import get_linear_schedule_with_warmup
@@ -184,7 +175,6 @@ for project in systems.split(","):
     lg = {}
 
     for epoch in range(num_epochs):
-        diff_out_path = curdir + "/output/{}/{}/{}/".format(model, project,train_percentage)
         # train
         prompt_model.train()
         tot_loss = 0
@@ -212,11 +202,6 @@ for project in systems.split(","):
         for j, prediction in enumerate(output_sentences):
             idx = i*batch_size + j
             lg = group_update(project, lg, logs[idx][0], prediction, idx)
-
-    # GA = get_accuracy(pd.Series(predictions), pd.Series(ground_truths))[3]
-    # print("GA:", GA)
-    # ED,_ = get_ED(predictions, ground_truths)
-    # print("ED:", ED)
 
     # with open("preds1.txt", "w") as f:
     #     f.write("\n".join(predictions))
