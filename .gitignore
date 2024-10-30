@@ -1,0 +1,16 @@
+.venv
+__pycache__/
+OpenPrompt/
+
+*.vim
+output.txt
+result.txt
+
+logs/**/0.025
+logs/**/cross
+logs/**/test
+logs/**/validation
+
+LLMs/flan-t5-base
+LLMs/flan-t5-small
+LLMs/Llama-3.1-8B
