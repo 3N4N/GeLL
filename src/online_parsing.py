@@ -208,11 +208,11 @@ for project in systems.split(","):
 
     log_groups = lg
 
-    # logs_split = [wordsplit(log, project) for log in [i[0] for i in logs]]
-    # log_groups = template_update(lg, logs_split, predictions)
-    # for key in log_groups.keys():
-    #     for id in log_groups[key]:
-    #         predictions[id] = key
+    logs_split = [wordsplit(log, project) for log in [i[0] for i in logs]]
+    log_groups = template_update(lg, logs_split)
+    for key in log_groups.keys():
+        for id in log_groups[key]:
+            predictions[id] = key
 
     GA = get_GA(log_groups, ground_truths)
     print("GA:", GA)

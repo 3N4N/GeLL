@@ -357,7 +357,7 @@ def imitate_logs(rootdir, project, max_num):
     raw_dataset = pd.read_csv(dataset_path)
     raw_dataset = raw_dataset[['Content', 'EventTemplate']]
     raw_dataset = raw_dataset.map( str)  # must convert to string or else will hit error
-    raw_dataset = raw_dataset[:100]
+    # raw_dataset = raw_dataset[:100]
 
     def read_csv_to_list(file_path):
         data_list = []
