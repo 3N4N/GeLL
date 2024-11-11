@@ -2,14 +2,18 @@
 
 import os, sys
 import random
-from helper import (
+
+from common import (
     group_update,
     template_update,
-    get_GA,
-    get_ED,
+    wordsplit,
     plg,
     imitate_logs,
     prepare_data
+)
+from evaluator import (
+    get_GA,
+    get_ED,
 )
 
 

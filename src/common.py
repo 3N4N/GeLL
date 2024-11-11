@@ -1,15 +1,15 @@
 import re
 import copy
 import csv
-import numpy as np
 import pandas as pd
 import random
-from nltk.metrics.distance import edit_distance
 from pathlib import Path
+
+from settings import benchmark_settings
+from preprocessing import LogLoader, wordsplit
 
 seed = 61
 random.seed(seed)
-np.random.seed(seed)
 
 def random_replace(string):
     '''
@@ -76,87 +76,6 @@ def is_number(s):
         except ValueError:
             continue
     return False
-
-def wordsplit(log,dataset,regx=None,regx_use=False):
-
-    if dataset == 'Android':
-        log = re.sub('\(', '( ', log)
-        log = re.sub('\)', ') ', log)
-        log = re.sub(':', ': ', log)
-        log = re.sub('=', '= ', log)
-        log = re.sub(',', ', ', log)
-    # elif dataset == 'Apache':
-    #     log = re.sub(',', ', ', log)
-    elif dataset == 'BGL':
-        log = re.sub('=', '= ', log)
-        log = re.sub(',', ', ', log)
-        log = re.sub('core\.', 'core. ', log)
-
-    elif dataset == 'Hadoop':
-        log = re.sub(':', ': ', log)
-        log = re.sub('=', '= ', log)
-        # log = re.sub(',', ', ', log)
-    elif dataset == 'HDFS':
-        log = re.sub(':', ': ', log)
-        log = re.sub('=', '= ', log)
-        log = re.sub(',', ', ', log)
-    elif dataset == 'HealthApp':
-        log = re.sub(':', ': ', log)
-        log = re.sub('=', '= ', log)
-        log = re.sub(',', ', ', log)
-    elif dataset == 'HPC':
-        log = re.sub('=', '= ', log)
-        log = re.sub(',', ', ', log)
-        # log = re.sub('-', '- ', log)
-        # log = re.sub('\[', '[ ', log)
-        # log = re.sub(']', '] ', log)
-
-    elif dataset == 'Linux':
-        log = re.sub('=', '= ', log)
-        log = re.sub(',', ', ', log)
-    elif dataset == 'Mac':
-        log = re.sub('\[', '[ ', log)
-        log = re.sub(']', '] ', log)
-        log = re.sub(',', ', ', log)
-    elif dataset == 'OpenSSH':
-        log = re.sub('=', '= ', log)
-        log = re.sub(':', ': ', log)
-        log = re.sub(',', ', ', log)
-    # elif dataset == 'OpenStack':
-    #     log = re.sub(',', ', ', log)
-    elif dataset == 'Spark':
-        log = re.sub('=', '= ', log)
-        log = re.sub(',', ', ', log)
-        log = re.sub('/', '/ ', log)
-
-    elif dataset == 'Proxifier':
-        log = re.sub('\(.*?\)', '', log)
-        log = re.sub(':', ' ', log)
-        log = re.sub(',', ', ', log)
-    elif dataset == 'Thunderbird':
-        log = re.sub(':', ': ', log)
-        log = re.sub('=', '= ', log)
-        log = re.sub(',', ', ', log)
-        log = re.sub('@', '@ ', log)
-    elif dataset == 'Windows':
-        log = re.sub(':', ': ', log)
-        log = re.sub('=', '= ', log)
-        log = re.sub('\[', '[ ', log)
-        log = re.sub(']', '] ', log)
-        log = re.sub(',', ', ', log)
-    elif dataset == 'Zookeeper':
-        log = re.sub(':', ': ', log)
-        log = re.sub('=', '= ', log)
-        log = re.sub(',', ', ', log)
-
-    if regx_use == True:
-        for ree in regx:
-            log = re.sub(ree, '<*>', log)
-
-    log = re.split(' +', log)
-    return log
-
-
 
 def wordcomp(prediction, template):
     _template = list(template)
@@ -305,44 +224,6 @@ def template_update(template_group,log_sentence):
     return new_template_group
 
 
-def get_GA(group,ground_list):
-    sum = len(ground_list)
-    correct = 0
-    count=0
-
-    for key in group.keys():
-        tag = 0
-        predict=group[key]
-        predict_group_num=len(predict)
-        count+=predict_group_num
-        groundtruth_num=ground_list.count(ground_list[predict[0]])
-        if predict_group_num==groundtruth_num:
-            for i in range(len(predict)):
-                if ground_list[predict[i]] != ground_list[predict[0]]:
-                    tag=1
-            if tag==1:
-                continue
-            else:
-                correct+=predict_group_num
-    GA=correct/sum
-    return GA
-
-def get_ED(predictions,groundtruths):
-
-    df = pd.DataFrame({'predictions': predictions, 'groundtruths': groundtruths})
-    df['predictions_']  = df["predictions"].str.replace( "\s+", "", regex=True)
-    df['groundtruths_'] = df["groundtruths"].str.replace( "\s+", "", regex=True)
-    edit_distance_result = []
-    for i, j in zip(
-        np.array(df['predictions_'].values, dtype="str"),
-        np.array(df['groundtruths_'].values, dtype="str"),
-    ):
-        edit_distance_result.append(edit_distance(i, j))
-
-    edit_distance_result_mean = np.mean(edit_distance_result)
-    edit_distance_result_std  = np.std(edit_distance_result)
-
-    return edit_distance_result_mean, edit_distance_result_std
 
 
 
@@ -353,11 +234,17 @@ def plg(lg):
 
 def imitate_logs(rootdir, project, max_num):
     dataset_folder = rootdir + "/logs/" + project
+    dataset_logfile = dataset_folder + "/" + project + "_2k.log"
     dataset_path = dataset_folder + "/" + project + "_2k.log_structured_corrected.csv"
+
+    logloader = LogLoader(benchmark_settings[project]['log_format'])
+    log_df = logloader.format(dataset_logfile)
+
     raw_dataset = pd.read_csv(dataset_path)
     raw_dataset = raw_dataset[['Content', 'EventTemplate']]
+    # raw_dataset['Content'] = log_df['Content']
     raw_dataset = raw_dataset.map( str)  # must convert to string or else will hit error
-    # raw_dataset = raw_dataset[:100]
+    # raw_dataset = raw_dataset[:10]
 
     def read_csv_to_list(file_path):
         data_list = []

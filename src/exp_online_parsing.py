@@ -12,32 +12,31 @@ import random
 import numpy as np
 import pandas as pd
 
-from sklearn.metrics import accuracy_score, precision_recall_fscore_support
 from openprompt.pipeline_base import PromptForGeneration
 from openprompt.prompts.generation_verbalizer import GenerationVerbalizer
 
-from helper import (
+from common import (
     group_update,
     template_update,
-    get_GA,
-    get_ED,
+    wordsplit,
     plg,
     prepare_data
+)
+from evaluator import (
+    get_GA,
+    get_ED,
 )
 
 
 # args
 max_num             = 3
-batch_size          = 100
+batch_size          = 10
 batch_size_train    = 5
 model               = 'flan-t5-small'
-num_epochs          = 2
+num_epochs          = 1
 learning_rate       = 5e-4
-train_percentage    = "0.025"
-projects            = "Spark"
-projects            = "Android,Apache,BGL,HDFS,HPC,Hadoop,HealthApp,Linux,Mac,OpenSSH,OpenStack,Proxifier,Spark,Thunderbird,Windows,Zookeeper"
-
-os.remove("result.txt") if os.path.exists("result.txt") else None
+systems             = "Apache"
+systems             = "Android,Apache,BGL,HDFS,HPC,Hadoop,HealthApp,Linux,Mac,OpenSSH,OpenStack,Proxifier,Spark,Thunderbird,Windows,Zookeeper"
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 if torch.cuda.is_available():
@@ -48,28 +47,18 @@ print(f"Using cuda: {use_cuda}")
 
 seed = 61
 random.seed(seed)
-np.random.seed(seed)
 lr = learning_rate
-num_epochs = num_epochs
 
 model_name = "t5"
+rootdir = '..'
 
-rootdir = ".."
-
-
-for project in projects.split(","):
+for project in systems.split(","):
     start_time = datetime.now()
-
     pretrainedmodel_path = rootdir + "/LLMs/{}/".format(model)
     train_data, parse_data, logs = prepare_data(rootdir, project, max_num)
-
-    # train_data = train_data[-100*max_num:]
-    # parse_data = parse_data[-100:]
-    # logs = logs[-100:]
-
     print(
         "Project: {}, Seed : {} , Model : {} , Epoch : {} , Batch_size : {} , Learning Rate : {}".format(
-            str(project),
+            project,
             str(seed),
             pretrainedmodel_path,
             str(num_epochs),
@@ -88,11 +77,6 @@ for project in projects.split(","):
     plm, tokenizer, model_config, WrapperClass = load_plm(
         model_name, pretrainedmodel_path
     )
-
-    plm2, tokenizer2, model_config2, WrapperClass2 = load_plm(
-        model_name, pretrainedmodel_path
-    )
-
     tokenizer = T5TokenizerFast.from_pretrained(pretrainedmodel_path)
     tokenizer.add_tokens(new_tokens=new_words)
 
@@ -112,21 +96,12 @@ for project in projects.split(","):
         tokenizer, classes=None, is_rule=True, label_words=label_words
     )
 
-    # define prompt model for classification  # enan: isn't it "for generation"?
+    # define prompt model for classification
     prompt_model = PromptForGeneration(
         plm=plm, template=mytemplate, tokenizer=tokenizer
     )
-    prompt_model1 = PromptForGeneration(
-        plm=plm, template=mytemplate, tokenizer=tokenizer
-    )
-    prompt_model2 = PromptForGeneration(
-        plm=plm2, template=mytemplate, tokenizer=tokenizer
-    )
     if use_cuda:
         prompt_model = prompt_model.cuda()
-        prompt_model1 = prompt_model1.cuda()
-        prompt_model2 = prompt_model2.cuda()
-
     # DataLoader
     from openprompt import PromptDataLoader
 
@@ -151,8 +126,8 @@ for project in projects.split(","):
     train_dataloader = getdataloader(train_data, batch_size, mytemplate, myverbalizer, tokenizer, WrapperClass, True)
     parse_dataloader = getdataloader(parse_data, batch_size, mytemplate, myverbalizer, tokenizer, WrapperClass, False)
 
-    from torch.optim import AdamW
     from transformers import get_linear_schedule_with_warmup
+    from torch.optim import AdamW
 
     loss_func = torch.nn.CrossEntropyLoss()
     no_decay = ["bias", "LayerNorm.weight"]
@@ -175,53 +150,50 @@ for project in projects.split(","):
             "weight_decay": 0.0,
         },
     ]
+    optimizer = AdamW(optimizer_grouped_parameters, lr=lr)
+    num_training_steps = num_epochs * len(train_dataloader)
+    scheduler = get_linear_schedule_with_warmup(
+        optimizer, num_warmup_steps=0, num_training_steps=num_training_steps
+    )
 
     generation_arguments = {
         "max_length": 128,
     }
 
 
+    tot_loss = 0
+    log_loss = 0
+    best_val_acc = 0
+    glb_step = 0
+    actual_step = 0
+    leave_training = False
+
+    acc_traces = []
+    tot_train_time = 0
+    pbar_update_freq = 10
 
     predictions = []
     ground_truths = []
-    predictions2 = []
-    ground_truths2 = []
-    batch = 0
-
-    best_val_acc = 0
-
     lg = {}
-    lg2 = {}
+
+    for epoch in range(num_epochs):
+        # train
+        prompt_model.train()
+        tot_loss = 0
+        for step, inputs in enumerate(train_dataloader):
+            if use_cuda:
+                inputs = inputs.cuda()
+            loss = prompt_model(inputs)
+            loss.backward()
+            tot_loss += loss.item()
+            optimizer.step()
+            optimizer.zero_grad()
+            scheduler.step()
 
     for i, parse_inputs in enumerate(parse_dataloader):
-        batch += 1
-
-        train_loader = getdataloader(train_data[i*batch_size*max_num:(i+1)*batch_size*max_num],
-                                    batch_size_train, mytemplate, None, tokenizer, WrapperClass, True)
-        # parse_loader = getdataloader(parse_data[0:(i+1)*batch_size],
-        #                             batch_size, mytemplate, None, tokenizer, WrapperClass, False)
-
-        optimizer = AdamW(optimizer_grouped_parameters, lr=lr)
-        num_training_steps = num_epochs * ((batch_size*max_num)/batch_size_train)
-        scheduler = get_linear_schedule_with_warmup(
-            optimizer, num_warmup_steps=0, num_training_steps=num_training_steps
-        )
-
-        best_val_acc = 0
-        for epoch in range(num_epochs):
-            prompt_model.train()
-            for train_inputs in train_loader:
-                if use_cuda:
-                    train_inputs = train_inputs.cuda()
-
-                loss = prompt_model(train_inputs)
-                loss.backward()
-                optimizer.step()
-                optimizer.zero_grad()
-                scheduler.step()
-
         if use_cuda:
             parse_inputs = parse_inputs.cuda()
+
         prompt_model.eval()
         _, output_sentences = prompt_model.generate(
             parse_inputs, **generation_arguments, verbose=False
@@ -233,30 +205,24 @@ for project in projects.split(","):
             idx = i*batch_size + j
             lg = group_update(project, lg, logs[idx][0], prediction, idx)
 
-        if i == 0:
-            prompt_model2.load_state_dict(prompt_model.state_dict())
+    # with open("preds1.txt", "w") as f:
+    #     f.write("\n".join(predictions))
 
-        # prompt_model2.eval()
-        # _, output_sentences = prompt_model2.generate(
-        #     parse_inputs, **generation_arguments, verbose=False
-        # )
-        # predictions2.extend(output_sentences)
-        # ground_truths2.extend(parse_inputs["tgt_text"])
+    log_groups = lg
 
-        # for j, prediction in enumerate(output_sentences):
-        #     idx = i*batch_size + j
-        #     lg2 = group_update(project, lg2, logs[idx][0], prediction, idx)
+    logs_split = [wordsplit(log, project) for log in [i[0] for i in logs]]
+    log_groups = template_update(lg, logs_split)
+    for key in log_groups.keys():
+        for id in log_groups[key]:
+            predictions[id] = key
 
-        GA = get_GA(lg, ground_truths)
-        # GA2 = get_GA(lg2, ground_truths)
-        ED,_ = get_ED(predictions, ground_truths)
-        # ED2,_ = get_ED(predictions2, ground_truths)
-        print(f"{batch:04d},{GA:.4f},{ED:.4f}")
-        with open("result.txt", "a") as f:
-            print(f"{batch:04d},{GA:.4f},{ED:.4f}", file=f)
+    GA = get_GA(log_groups, ground_truths)
+    print("GA:", GA)
+    ED,_ = get_ED(predictions, ground_truths)
+    print("ED:", ED)
 
-    plg(lg)
-    # print(lg.keys())
+    # with open("preds2.txt", "w") as f:
+    #     f.write("\n".join(predictions))
 
     finish_time = datetime.now()
     duration = finish_time - start_time
@@ -266,6 +232,4 @@ for project in projects.split(","):
     minutes = (duration.seconds // 60) % 60
     seconds = duration.seconds % 60
 
-    print(
-        f"\n\nRunning: {days} days, {hours} hours, {minutes} mins, {seconds} sec."
-    )
+    print(f"\n\nRunning: {days} days, {hours} hours, {minutes} mins, {seconds} sec.")
