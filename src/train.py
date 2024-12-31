@@ -260,8 +260,6 @@ for project in project_list:
     ]
     optimizer = AdamW(optimizer_grouped_parameters, lr=lr)
     num_training_steps = num_epochs * len(train_dataloader)
-    print(num_training_steps)
-    exit()
     scheduler = get_linear_schedule_with_warmup(
         optimizer, num_warmup_steps=0, num_training_steps=num_training_steps
     )
