@@ -26,7 +26,7 @@ class LogLoader:
         regex = ''
         for k in range(len(splitters)):
             if k % 2 == 0:
-                splitter = re.sub(' +', '\\\s+', splitters[k])
+                splitter = re.sub(' +', r'\\s+', splitters[k])
                 regex += splitter
             else:
                 header = splitters[k].strip('<').strip('>')
@@ -62,8 +62,8 @@ class LogLoader:
 def wordsplit(log,dataset,regx=None,regx_use=False):
 
     if dataset == 'Android':
-        log = re.sub('\(', '( ', log)
-        log = re.sub('\)', ') ', log)
+        log = re.sub(r'\(', '( ', log)
+        log = re.sub(r'\)', ') ', log)
         log = re.sub(':', ': ', log)
         log = re.sub('=', '= ', log)
         log = re.sub(',', ', ', log)
@@ -72,7 +72,7 @@ def wordsplit(log,dataset,regx=None,regx_use=False):
     elif dataset == 'BGL':
         log = re.sub('=', '= ', log)
         log = re.sub(',', ', ', log)
-        log = re.sub('core\.', 'core. ', log)
+        log = re.sub(r'core\.', 'core. ', log)
 
     elif dataset == 'Hadoop':
         log = re.sub(':', ': ', log)
@@ -90,15 +90,15 @@ def wordsplit(log,dataset,regx=None,regx_use=False):
         log = re.sub('=', '= ', log)
         log = re.sub(',', ', ', log)
         # log = re.sub('-', '- ', log)
-        # log = re.sub('\[', '[ ', log)
-        # log = re.sub(']', '] ', log)
+        # log = re.sub(r'\[', '[ ', log)
+        # log = re.sub(r'\]', '] ', log)
 
     elif dataset == 'Linux':
         log = re.sub('=', '= ', log)
         log = re.sub(',', ', ', log)
     elif dataset == 'Mac':
-        log = re.sub('\[', '[ ', log)
-        log = re.sub(']', '] ', log)
+        log = re.sub(r'\[', '[ ', log)
+        log = re.sub(r'\]', '] ', log)
         log = re.sub(',', ', ', log)
     elif dataset == 'OpenSSH':
         log = re.sub('=', '= ', log)
@@ -112,7 +112,7 @@ def wordsplit(log,dataset,regx=None,regx_use=False):
         log = re.sub('/', '/ ', log)
 
     elif dataset == 'Proxifier':
-        log = re.sub('\(.*?\)', '', log)
+        log = re.sub(r'\(.*?\)', '', log)
         log = re.sub(':', ' ', log)
         log = re.sub(',', ', ', log)
     elif dataset == 'Thunderbird':
@@ -123,8 +123,8 @@ def wordsplit(log,dataset,regx=None,regx_use=False):
     elif dataset == 'Windows':
         log = re.sub(':', ': ', log)
         log = re.sub('=', '= ', log)
-        log = re.sub('\[', '[ ', log)
-        log = re.sub(']', '] ', log)
+        log = re.sub(r'\[', '[ ', log)
+        log = re.sub(r'\]', '] ', log)
         log = re.sub(',', ', ', log)
     elif dataset == 'Zookeeper':
         log = re.sub(':', ': ', log)
@@ -135,5 +135,5 @@ def wordsplit(log,dataset,regx=None,regx_use=False):
         for ree in regx:
             log = re.sub(ree, '<*>', log)
 
-    log = re.split(' +', log)
-    return log
+    logsplit = re.split(' +', log)
+    return logsplit

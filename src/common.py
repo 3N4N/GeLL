@@ -1,12 +1,11 @@
 import re
 import copy
-import csv
-import pandas as pd
 import random
+import pandas as pd
 from pathlib import Path
 
 from settings import benchmark_settings
-from preprocessing import LogLoader, wordsplit
+from preprocessing import wordsplit
 
 seed = 61
 random.seed(seed)
@@ -232,66 +231,10 @@ def plg(lg):
     pass
 
 
-def imitate_logs(rootdir, project, max_num):
-    dataset_folder = rootdir + "/logs/" + project
-    dataset_logfile = dataset_folder + "/" + project + "_2k.log"
-    dataset_path = dataset_folder + "/" + project + "_2k.log_structured_corrected.csv"
+def prepare_data(rootdir, project):
 
-    logloader = LogLoader(benchmark_settings[project]['log_format'])
-    log_df = logloader.format(dataset_logfile)
-
-    raw_dataset = pd.read_csv(dataset_path)
-    raw_dataset = raw_dataset[['Content', 'EventTemplate']]
-    # raw_dataset['Content'] = log_df['Content']
-    raw_dataset = raw_dataset.map( str)  # must convert to string or else will hit error
-    # raw_dataset = raw_dataset[:10]
-
-    def read_csv_to_list(file_path):
-        data_list = []
-        with open(file_path, 'r') as csvfile:
-            reader = csv.reader(csvfile)
-            for row in reader:
-                data_list.append(row[0])
-        return data_list
-
-    variablelist = read_csv_to_list(rootdir + "/Variableset/variablelist1" + project + ".csv")
-
-    train_data = []
-    parse_data = []
-    for i in range(len(raw_dataset)):
-        last_id = []
-        x = raw_dataset.iloc[i,0]
-        y = raw_dataset.iloc[i,1]
-        parse_data.append([x,y])
-        for j in range(max_num):
-            xx = wordsplit(x,project) # .split()
-            yy = wordsplit(y,project) # .split()
-            # print(xx,yy)
-            ids = []
-            for id in range(len(yy)):
-                # if "<*>" not in yy[id]:
-                if xx[id] not in variablelist:
-                    ids.append(id)
-            if len(ids) == 0:
-                continue
-            idx = random.choice(ids)
-            last_id.append(idx)
-            replace_variable = variablelist[random.randrange(0, len(variablelist))]
-            xx[idx] = replace_variable
-            yy[idx] = "<*>"
-            _x = " ".join(xx)
-            _y = " ".join(yy)
-            train_data.append([_x,_y])
-            # if j == 0:
-            #     parse_data.append([_x,_y])
-            # else:
-            #     train_data.append([_x,_y])
-    return train_data, parse_data
-
-
-def prepare_data(rootdir, project,max_num):
-
-    train_data, parse_data = imitate_logs(rootdir, project, max_num)
+    train_data = pd.read_csv("mutes/" + project + "/train.csv", index_col=False).values.tolist()
+    parse_data = pd.read_csv("mutes/" + project + "/test.csv",  index_col=False).values.tolist()
 
     from openprompt.data_utils import InputExample
 
@@ -322,3 +265,10 @@ def prepare_data(rootdir, project,max_num):
 
     print("LEN:", len(train_dataset), len(parse_dataset))
     return train_dataset, parse_dataset, parse_data
+
+
+if __name__ == '__main__':
+    from pathlib import Path
+    rootdir = Path(__file__).absolute().parent.parent
+    print(f"Project root: {rootdir}")
+    prepare_data(rootdir, 'Windows')

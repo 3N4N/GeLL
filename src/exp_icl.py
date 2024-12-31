@@ -1,5 +1,9 @@
 # hf_access_token = <huggingface token>
 
+from pathlib import Path
+rootdir = Path(__file__).absolute().parent.parent
+print(f"Project root: {rootdir}")
+
 import os, sys
 import random
 
@@ -8,7 +12,7 @@ from common import (
     template_update,
     wordsplit,
     plg,
-    imitate_logs,
+    mutate_logs,
     prepare_data
 )
 from evaluator import (
@@ -62,7 +66,6 @@ print(f"Using cuda: {use_cuda}")
 seed = 61
 random.seed(seed)
 
-rootdir    = '..'
 max_num    = 3
 use_logs   = 2000
 batch_size = 100
@@ -70,7 +73,7 @@ systems    = "Apache"
 systems    = "Android,Apache,BGL,HDFS,HPC,Hadoop,HealthApp,Linux,Mac,OpenSSH,OpenStack,Proxifier,Spark,Thunderbird,Windows,Zookeeper"
 
 for project in systems.split(","):
-    train_data, parse_data = imitate_logs(rootdir, project, max_num)
+    train_data, parse_data = mutate_logs(rootdir, project, max_num)
     print(
         "Project: {}, Seed : {} , Model : {} , Batch_size : {}".format(
             project,

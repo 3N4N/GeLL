@@ -1,3 +1,7 @@
+from pathlib import Path
+rootdir = Path(__file__).absolute().parent.parent
+print(f"Project root: {rootdir}")
+
 import os
 import torch
 import sys
@@ -16,6 +20,7 @@ from openprompt.pipeline_base import PromptForGeneration
 from openprompt.prompts.generation_verbalizer import GenerationVerbalizer
 
 from common import (
+    wordsplit,
     group_update,
     template_update,
     plg,
@@ -26,17 +31,28 @@ from evaluator import (
     get_ED,
 )
 
+parser = argparse.ArgumentParser()
+parser.add_argument("--max_num", type=int, default=3)
+parser.add_argument("--batch_size", type=int, default=100)
+parser.add_argument("--num_epochs", type=int, default=2)
+parser.add_argument("--model", type=str, default="flan-t5-small")
+parser.add_argument("--learning_rate", type=float, default=5e-4)
+parser.add_argument(
+    "--projects",
+    type=str,
+    default="Android,Apache,BGL,HDFS,HPC,Hadoop,HealthApp,Linux,Mac,OpenSSH,OpenStack,Proxifier,Spark,Thunderbird,Windows,Zookeeper"
+    # default="Windows,Apache,Spark",
+)
+args = parser.parse_args()
 
 # args
-max_num             = 3
-batch_size          = 100
-batch_size_train    = 5
-model               = 'flan-t5-base'
-num_epochs          = 2
-learning_rate       = 5e-4
-train_percentage    = "0.025"
-projects            = "Spark"
-projects            = "Android,Apache,BGL,HDFS,HPC,Hadoop,HealthApp,Linux,Mac,OpenSSH,OpenStack,Proxifier,Spark,Thunderbird,Windows,Zookeeper"
+max_num             = args.max_num
+batch_size          = args.batch_size
+model               = args.model
+num_epochs          = args.num_epochs
+learning_rate       = args.learning_rate
+projects            = args.projects
+batch_size_training = 5
 
 os.remove("result.txt") if os.path.exists("result.txt") else None
 
@@ -55,14 +71,11 @@ num_epochs = num_epochs
 
 model_name = "t5"
 
-rootdir = ".."
-
-
 for project in projects.split(","):
     start_time = datetime.now()
 
-    pretrainedmodel_path = rootdir + "/LLMs/{}/".format(model)
-    train_data, parse_data, logs = prepare_data(rootdir, project, max_num)
+    pretrainedmodel_path = rootdir / "LLMs" / model
+    train_data, parse_data, logs = prepare_data(rootdir, project)
 
     # train_data = train_data[-100*max_num:]
     # parse_data = parse_data[-100:]
@@ -198,12 +211,12 @@ for project in projects.split(","):
         batch += 1
 
         train_loader = getdataloader(train_data[i*batch_size*max_num:(i+1)*batch_size*max_num],
-                                    batch_size_train, mytemplate, None, tokenizer, WrapperClass, True)
+                                    batch_size_training, mytemplate, None, tokenizer, WrapperClass, True)
         # parse_loader = getdataloader(parse_data[0:(i+1)*batch_size],
         #                             batch_size, mytemplate, None, tokenizer, WrapperClass, False)
 
         optimizer = AdamW(optimizer_grouped_parameters, lr=lr)
-        num_training_steps = num_epochs * ((batch_size*max_num)/batch_size_train)
+        num_training_steps = num_epochs * ((batch_size*max_num)/batch_size_training)
         scheduler = get_linear_schedule_with_warmup(
             optimizer, num_warmup_steps=0, num_training_steps=num_training_steps
         )
@@ -248,16 +261,20 @@ for project in projects.split(","):
         #     idx = i*batch_size + j
         #     lg2 = group_update(project, lg2, logs[idx][0], prediction, idx)
 
-        GA = get_GA(lg, ground_truths)
-        # GA2 = get_GA(lg2, ground_truths)
-        ED,_ = get_ED(predictions, ground_truths)
-        # ED2,_ = get_ED(predictions2, ground_truths)
-        print(f"{batch:04d},{GA:.4f},{ED:.4f}")
-        with open("result.txt", "a") as f:
-            print(f"{batch:04d},{GA:.4f},{ED:.4f}", file=f)
+        # logs_split = [wordsplit(log, project) for log in [i[0] for i in logs]]
+        # log_groups = template_update(lg, logs_split)
+        log_groups = lg
 
-    plg(lg)
-    # print(lg.keys())
+        for key in log_groups.keys():
+            for idx in log_groups[key]:
+                predictions[idx] = " ".join(key).replace(sub_sign.strip(),"<*>").strip()
+        output_dir = rootdir / "output" / model / project
+        output_dir = rootdir / "output" / (model + "-old") / project
+        os.makedirs(output_dir, exist_ok=True)
+        df = pd.DataFrame(zip([x[0] for x in logs], predictions, ground_truths))
+        df.to_csv(output_dir / "prediction.csv", index=False, header=False)
+
+    plg(log_groups)
 
     finish_time = datetime.now()
     duration = finish_time - start_time

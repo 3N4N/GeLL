@@ -1,3 +1,7 @@
+from pathlib import Path
+rootdir = Path(__file__).absolute().parent.parent
+print(f"Project root: {rootdir}")
+
 import os
 import torch
 import sys
@@ -50,7 +54,6 @@ random.seed(seed)
 lr = learning_rate
 
 model_name = "t5"
-rootdir = '..'
 
 for project in systems.split(","):
     start_time = datetime.now()
