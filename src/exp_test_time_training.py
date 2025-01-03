@@ -155,9 +155,9 @@ for project in projects.split(","):
             max_seq_length=256,
             decoder_max_length=256,
             batch_size=batch_size,
-            shuffle=True if training else False,
-            teacher_forcing=True if training else False,
-            predict_eos_token=True if training else False,
+            shuffle=training,
+            teacher_forcing=training,
+            predict_eos_token=training,
             truncate_method="tail",
         ).dataloader
         return dataloader
