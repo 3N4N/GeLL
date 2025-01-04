@@ -134,25 +134,30 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--dirpath", type=str, default=None)
-    parser.add_argument("--project", type=str, default=None)
+    parser.add_argument("--batch_size", type=int, default=100)
+    parser.add_argument(
+        "--projects",
+        type=str,
+        default="Android,Apache,BGL,HDFS,HPC,Hadoop,HealthApp,Linux,Mac,OpenSSH,OpenStack,Proxifier,Spark,Thunderbird,Windows,Zookeeper"
+    )
     args = parser.parse_args()
 
-    batch_size = 100
-    for project in benchmark_settings.keys():
-        if args.project is not None and project != args.project: continue
+    batch_size = args.batch_size
+    for project in args.projects.split(","):
         print(project)
 
         predic_file = Path(args.dirpath) / project / "prediction.csv"
         result_file = Path(args.dirpath) / project / "result.csv"
         df_parsedlog = pd.read_csv(
             predic_file, index_col=False, header=None, names=["Log", "Predict", "EventTemplate"]
-        )
+        ).map(str)
         f_result = open(result_file, "w")
         print("Batch,GA,PA,ED", file=f_result)
 
         results = []
         for i in range(len(df_parsedlog)//batch_size):
-            GA, PA, ED, _ = evaluate(df_parsedlog.loc[:(i+1)*batch_size].copy())
+            df = df_parsedlog.iloc[:(i+1)*batch_size].copy()
+            GA, PA, ED, _ = evaluate(df)
             results.append([i+1, GA,PA,ED])
             print(f"{i+1:04d},{GA:.03f},{PA:.03f},{ED:.03f}")
             print(f"{i+1:04d},{GA:.03f},{PA:.03f},{ED:.03f}", file=f_result)
