@@ -37,6 +37,7 @@ parser.add_argument("--batch_size", type=int, default=100)
 parser.add_argument("--num_epochs", type=int, default=2)
 parser.add_argument("--model", type=str, default="flan-t5-small")
 parser.add_argument("--learning_rate", type=float, default=5e-4)
+parser.add_argument("--output_dir", type=str, default= rootdir / "output" / "default")
 parser.add_argument(
     "--projects",
     type=str,
@@ -267,12 +268,12 @@ for project in projects.split(","):
 
         for key in log_groups.keys():
             for idx in log_groups[key]:
-                predictions[idx] = " ".join(key).replace(sub_sign.strip(),"<*>").strip()
-        output_dir = rootdir / "output" / model / project
-        output_dir = rootdir / "output" / (model + "-old") / project
-        os.makedirs(output_dir, exist_ok=True)
-        df = pd.DataFrame(zip([x[0] for x in logs], predictions, ground_truths))
-        df.to_csv(output_dir / "prediction.csv", index=False, header=False)
+                predictions[idx] = " ".join(key).strip()
+
+    output_dir = Path(args.output_dir) / project
+    os.makedirs(output_dir, exist_ok=True)
+    df = pd.DataFrame(zip([x[0] for x in logs], predictions, ground_truths))
+    df.to_csv(output_dir / "prediction.csv", index=False, header=False)
 
     plg(log_groups)
 
