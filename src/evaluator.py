@@ -1,14 +1,14 @@
 import numpy as np
 import pandas as pd
 import scipy.special
-from nltk.metrics.distance import edit_distance
+from nltk.metrics.distance import edit_distance as calc_edit_distance
 from sklearn.metrics import accuracy_score
 
 from settings import benchmark_settings
 
 pd.options.display.float_format = "{:,.2f}".format
 
-def get_GA(group, ground_list):
+def __get_GA(group, ground_list):
     sum = len(ground_list)
     correct = 0
     count=0
@@ -30,26 +30,25 @@ def get_GA(group, ground_list):
     GA=correct/sum
     return GA
 
-def get_ED(predictions, groundtruths):
-
-    df = pd.DataFrame({'predictions': predictions, 'groundtruths': groundtruths})
-    df['predictions_']  = df["predictions"].str.replace( r"\s+", "", regex=True)
-    df['groundtruths_'] = df["groundtruths"].str.replace(r"\s+", "", regex=True)
-    edit_distance_result = []
-    for i, j in zip(
-        np.array(df['predictions_'].values, dtype="str"),
-        np.array(df['groundtruths_'].values, dtype="str"),
-    ):
-        edit_distance_result.append(edit_distance(i, j))
-
-    edit_distance_result_mean = np.mean(edit_distance_result)
-    edit_distance_result_std  = np.std(edit_distance_result)
-
-    return edit_distance_result_mean, edit_distance_result_std
-
-
-
 def get_accuracy(series_groundtruth, series_parsedlog, debug=False):
+    """Compute accuracy metrics between log parsing results and ground truth
+
+    Arguments
+    ---------
+        series_groundtruth : pandas.Series
+            A sequence of groundtruth event Ids
+        series_parsedlog : pandas.Series
+            A sequence of parsed event Ids
+        debug : bool, default False
+            print error log messages when set to True
+
+    Returns
+    -------
+        precision : float
+        recall : float
+        f_measure : float
+        accuracy : float
+    """
     series_groundtruth_valuecounts = series_groundtruth.value_counts()
     real_pairs = 0
     for count in series_groundtruth_valuecounts:
@@ -91,41 +90,29 @@ def get_accuracy(series_groundtruth, series_parsedlog, debug=False):
         for count in series_groundtruth_logId_valuecounts:
             if count > 1:
                 accurate_pairs += scipy.special.comb(count, 2)
+
     precision = float(accurate_pairs) / parsed_pairs
     recall = float(accurate_pairs) / real_pairs
     f_measure = 2 * precision * recall / (precision + recall)
     accuracy = float(accurate_events) / series_groundtruth.size
     return precision, recall, f_measure, accuracy
 
-def evaluate(df_parsedlog):
-    df_parsedlog["Predict_NoSpaces"] = df_parsedlog["Predict"].str.replace(
-        r"\s+", "", regex=True
-    )
-    df_parsedlog["EventTemplate_NoSpaces"] = df_parsedlog["EventTemplate"].str.replace(
-        r"\s+", "", regex=True
-    )
-    accuracy_exact_string_matching = accuracy_score(
-        np.array(df_parsedlog.EventTemplate_NoSpaces.values, dtype="str"),
-        np.array(df_parsedlog.Predict_NoSpaces.values, dtype="str"),
-    )
-    edit_distance_result = []
-    for i, j in zip(
-        np.array(df_parsedlog.EventTemplate_NoSpaces.values, dtype="str"),
-        np.array(df_parsedlog.Predict_NoSpaces.values, dtype="str"),
-    ):
-        edit_distance_result.append(edit_distance(i, j))
 
-    edit_distance_result_mean = np.mean(edit_distance_result)
-    edit_distance_result_std = np.std(edit_distance_result)
-    (precision, recall, f_measure, accuracy_GA) = get_accuracy(
-        df_parsedlog["EventTemplate_NoSpaces"], df_parsedlog["Predict_NoSpaces"]
-    )
-    return (
-        accuracy_GA,
-        accuracy_exact_string_matching,
-        edit_distance_result_mean,
-        edit_distance_result_std,
-    )
+def get_PA(series_groundtruth, series_parsedlog):
+    y_true = np.array(series_groundtruth.values, dtype="str")
+    y_pred   = np.array(series_parsedlog.values, dtype="str")
+
+    PA = accuracy_score(y_true, y_pred)
+    return PA
+
+def get_ED(series_groundtruth, series_parsedlog):
+    y_true = np.array(series_groundtruth.values, dtype="str")
+    y_pred = np.array(series_parsedlog.values, dtype="str")
+
+    edit_distances = [calc_edit_distance(i,j) for (i,j) in zip(y_true, y_pred)]
+    ED_mean = np.mean(edit_distances)
+    ED_std = np.std(edit_distances)
+    return ED_mean, ED_std
 
 if __name__ == "__main__":
 
@@ -155,9 +142,20 @@ if __name__ == "__main__":
         print("Batch,GA,PA,ED", file=f_result)
 
         results = []
+        edit_distance_in_batch = []
         for i in range(len(df_parsedlog)//batch_size):
             df = df_parsedlog.iloc[:(i+1)*batch_size].copy()
-            GA, PA, ED, _ = evaluate(df)
+            series_parsedlog = df["Predict"].str.replace( r"\s+", "", regex=True)
+            series_groundtruth = df["EventTemplate"].str.replace( r"\s+", "", regex=True)
+
+            _,_,_, GA = get_accuracy(series_groundtruth,series_parsedlog)
+            PA = get_PA(series_groundtruth,series_parsedlog)
+
+            edit_distance,_ = get_ED(series_groundtruth.tail(batch_size),
+                                     series_parsedlog.tail(batch_size))
+            edit_distance_in_batch.append(edit_distance)
+            ED = np.mean(edit_distance_in_batch)
+
             results.append([i+1, GA,PA,ED])
             print(f"{i+1:04d},{GA:.03f},{PA:.03f},{ED:.03f}")
             print(f"{i+1:04d},{GA:.03f},{PA:.03f},{ED:.03f}", file=f_result)
