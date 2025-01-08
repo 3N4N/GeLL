@@ -2,107 +2,56 @@ import numpy as np
 import pandas as pd
 import scipy.special
 from nltk.metrics.distance import edit_distance as calc_edit_distance
-from sklearn.metrics import accuracy_score
 
 from settings import benchmark_settings
 
 pd.options.display.float_format = "{:,.2f}".format
 
-def __get_GA(group, ground_list):
-    sum = len(ground_list)
-    correct = 0
-    count=0
-
-    for key in group.keys():
-        tag = 0
-        predict=group[key]
-        predict_group_num=len(predict)
-        count+=predict_group_num
-        groundtruth_num=ground_list.count(ground_list[predict[0]])
-        if predict_group_num==groundtruth_num:
-            for i in range(len(predict)):
-                if ground_list[predict[i]] != ground_list[predict[0]]:
-                    tag=1
-            if tag==1:
-                continue
-            else:
-                correct+=predict_group_num
-    GA=correct/sum
-    return GA
-
-def get_accuracy(series_groundtruth, series_parsedlog, debug=False):
-    """Compute accuracy metrics between log parsing results and ground truth
-
-    Arguments
-    ---------
-        series_groundtruth : pandas.Series
-            A sequence of groundtruth event Ids
-        series_parsedlog : pandas.Series
-            A sequence of parsed event Ids
-        debug : bool, default False
-            print error log messages when set to True
-
-    Returns
-    -------
-        precision : float
-        recall : float
-        f_measure : float
-        accuracy : float
-    """
+def get_accuracy(series_groundtruth, series_parsedlog, filter_templates=None):
     series_groundtruth_valuecounts = series_groundtruth.value_counts()
-    real_pairs = 0
-    for count in series_groundtruth_valuecounts:
-        if count > 1:
-            real_pairs += scipy.special.comb(count, 2)
-
     series_parsedlog_valuecounts = series_parsedlog.value_counts()
-    parsed_pairs = 0
-    for count in series_parsedlog_valuecounts:
-        if count > 1:
-            parsed_pairs += scipy.special.comb(count, 2)
-
-    accurate_pairs = 0
-    accurate_events = 0  # determine how many lines are correctly parsed
-    for parsed_eventId in series_parsedlog_valuecounts.index:
-        logIds = series_parsedlog[series_parsedlog == parsed_eventId].index
-        series_groundtruth_logId_valuecounts = series_groundtruth[logIds].value_counts()
-        error_eventIds = (
-            parsed_eventId,
-            series_groundtruth_logId_valuecounts.index.tolist(),
-        )
-        error = True
-        if series_groundtruth_logId_valuecounts.size == 1:
-            groundtruth_eventId = series_groundtruth_logId_valuecounts.index[0]
-            if (
-                logIds.size
-                == series_groundtruth[series_groundtruth == groundtruth_eventId].size
-            ):
-                accurate_events += logIds.size
-                error = False
-        if error and debug:
-            print(
-                "(parsed_eventId, groundtruth_eventId) =",
-                error_eventIds,
-                "failed",
-                logIds.size,
-                "messages",
-            )
-        for count in series_groundtruth_logId_valuecounts:
-            if count > 1:
-                accurate_pairs += scipy.special.comb(count, 2)
-
-    precision = float(accurate_pairs) / parsed_pairs
-    recall = float(accurate_pairs) / real_pairs
-    f_measure = 2 * precision * recall / (precision + recall)
-    accuracy = float(accurate_events) / series_groundtruth.size
-    return precision, recall, f_measure, accuracy
-
+    df_combined = pd.concat([series_groundtruth, series_parsedlog], axis=1, keys=['groundtruth', 'parsedlog'])
+    grouped_df = df_combined.groupby('groundtruth')
+    accurate_events = 0 # determine how many lines are correctly parsed
+    accurate_templates = 0
+    if filter_templates is not None:
+        filter_identify_templates = set()
+    # for ground_truthId in series_groundtruth_valuecounts.index:
+    for ground_truthId, group in grouped_df:
+        # logIds = series_groundtruth[series_groundtruth == ground_truthId].index
+        series_parsedlog_logId_valuecounts = group['parsedlog'].value_counts()
+        if filter_templates is not None and ground_truthId in filter_templates:
+            for parsed_eventId in series_parsedlog_logId_valuecounts.index:
+                filter_identify_templates.add(parsed_eventId)
+        if series_parsedlog_logId_valuecounts.size == 1:
+            parsed_eventId = series_parsedlog_logId_valuecounts.index[0]
+            if len(group) == series_parsedlog[series_parsedlog == parsed_eventId].size:
+                if (filter_templates is None) or (ground_truthId in filter_templates):
+                    accurate_events += len(group)
+                    accurate_templates += 1
+    # print("filter templates: ", len(filter_templates))
+    # print("total messages: ", len(series_groundtruth[series_groundtruth.isin(filter_templates)]))
+    # print("set of total: ", len(filter_identify_templates))
+    # print(accurate_events, accurate_templates)
+    if filter_templates is not None:
+        GA = float(accurate_events) / len(series_groundtruth[series_groundtruth.isin(filter_templates)])
+        PGA = float(accurate_templates) / len(filter_identify_templates)
+        RGA = float(accurate_templates) / len(filter_templates)
+    else:
+        GA = float(accurate_events) / len(series_groundtruth)
+        PGA = float(accurate_templates) / len(series_parsedlog_valuecounts)
+        RGA = float(accurate_templates) / len(series_groundtruth_valuecounts)
+    # print(FGA, RGA)
+    FGA = 0.0
+    if PGA != 0 or RGA != 0:
+        FGA = 2 * (PGA * RGA) / (PGA + RGA)
+    return GA, FGA, PGA, RGA
 
 def get_PA(series_groundtruth, series_parsedlog):
-    y_true = np.array(series_groundtruth.values, dtype="str")
-    y_pred   = np.array(series_parsedlog.values, dtype="str")
+    correctly_parsed_logs = series_groundtruth.eq(series_parsedlog).values.sum()
+    total_logs = len(series_groundtruth)
 
-    PA = accuracy_score(y_true, y_pred)
+    PA = float(correctly_parsed_logs) / total_logs
     return PA
 
 def get_ED(series_groundtruth, series_parsedlog):
@@ -110,9 +59,7 @@ def get_ED(series_groundtruth, series_parsedlog):
     y_pred = np.array(series_parsedlog.values, dtype="str")
 
     edit_distances = [calc_edit_distance(i,j) for (i,j) in zip(y_true, y_pred)]
-    ED_mean = np.mean(edit_distances)
-    ED_std = np.std(edit_distances)
-    return ED_mean, ED_std
+    return np.mean(edit_distances), np.std(edit_distances)
 
 if __name__ == "__main__":
 
@@ -148,8 +95,8 @@ if __name__ == "__main__":
             series_parsedlog = df["Predict"].str.replace( r"\s+", "", regex=True)
             series_groundtruth = df["EventTemplate"].str.replace( r"\s+", "", regex=True)
 
-            _,_,_, GA = get_accuracy(series_groundtruth,series_parsedlog)
-            PA = get_PA(series_groundtruth,series_parsedlog)
+            GA, FGA, _,_ = get_accuracy(series_groundtruth, series_parsedlog)
+            PA = get_PA(series_groundtruth, series_parsedlog)
 
             edit_distance,_ = get_ED(series_groundtruth.tail(batch_size),
                                      series_parsedlog.tail(batch_size))
